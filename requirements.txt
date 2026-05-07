@@ -1,0 +1,15 @@
+# Core Web Framework
+Django>=4.2.0
+
+# Database & Storage
+psycopg2-binary>=2.9.0
+chromadb>=0.4.0
+
+# AI & Document Processing
+langchain-text-splitters>=0.0.1
+pymupdf>=1.23.0
+requests>=2.31.0
+
+# Security & Utilities
+python-dotenv>=1.0.0
+whitenoise>=6.5.0

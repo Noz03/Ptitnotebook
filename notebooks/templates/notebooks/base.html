@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="vi" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTIT Notebook</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-200">
+    
+    <nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16 flex items-center justify-between px-6">
+        <a href="{% url 'dashboard' %}" class="text-xl font-bold tracking-wider text-blue-600 dark:text-blue-400">
+            PTIT Notebook
+        </a>
+        
+        <div class="flex items-center gap-4">
+            <button onclick="document.documentElement.classList.toggle('dark')" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                🌓
+            </button>
+            
+            <div x-data="{ open: false }" class="relative">
+                <button @click="open = !open" class="w-10 h-10 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center font-bold uppercase">
+                    {{ user.username|slice:":1" }}
+                </button>
+                <div x-show="open" @click.away="open = false" style="display: none;" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg py-2 z-50">
+                    <p class="px-4 py-2 text-sm text-gray-500 border-b dark:border-gray-700 truncate" title="{{ user.username }}">
+                        {{ user.username }}
+                    </p>
+                    <a href="{% url 'logout' %}" class="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="p-6">
+        {% block content %}{% endblock %}
+    </main>
+
+</body>
+</html>

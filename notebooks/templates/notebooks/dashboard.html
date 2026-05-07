@@ -1,0 +1,78 @@
+{% extends 'notebooks/base.html' %}
+
+{% block content %}
+<div x-data="{ isModalOpen: false, searchQuery: '' }" class="max-w-7xl mx-auto">
+    
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-2xl font-bold">Created Note</h1>
+        <div class="flex gap-4">
+            <input x-model="searchQuery" type="text" placeholder="Tìm kiếm note..." class="px-4 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <button @click="isModalOpen = true" class="px-4 py-2 bg-white border border-gray-300 dark:bg-gray-800 dark:border-gray-700 rounded-md hover:bg-gray-50 flex items-center gap-2">
+                <span>+</span> Tạo mới
+            </button>
+        </div>
+    </div>
+
+    {% if notebooks %}
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {% for note in notebooks %}
+            <div x-show="'{{ note.name|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase())" 
+                 class="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow relative">
+                
+                <a href="{% url 'workspace' note.id %}" class="block h-full">
+                    <h3 class="text-lg font-semibold">{{ note.name }}</h3>
+                    <p class="text-xs text-gray-400 mt-4">Truy cập: {{ note.last_accessed|date:"d/m/Y H:i" }}</p>
+                </a>
+                
+                <div x-data="{ menuOpen: false }" class="absolute top-4 right-4" @click.stop>
+                    <button @click="menuOpen = !menuOpen" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    </button>
+                    
+                    <div x-show="menuOpen" @click.away="menuOpen = false" style="display: none;" class="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-700 rounded-md shadow-lg border z-10 overflow-hidden">
+                        
+                        <form method="POST" action="{% url 'rename_notebook' note.id %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="new_name" class="rename-input">
+                            <button type="button" 
+                                    @click="let name = prompt('Nhập tên mới:', '{{ note.name|escapejs }}'); if(name && name.trim()){ $el.previousElementSibling.value = name; $el.parentElement.submit(); }" 
+                                    class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600">
+                                Đổi tên
+                            </button>
+                        </form>
+
+                        <form method="POST" action="{% url 'delete_notebook' note.id %}" onsubmit="return confirm('Ngài có chắc chắn muốn xóa vĩnh viễn cuốn sổ này không?');">
+                            {% csrf_token %}
+                            <button type="submit" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-600 border-t border-gray-100 dark:border-gray-600">
+                                Xóa note
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="flex items-center justify-center h-64">
+            <p class="text-gray-400 text-lg">Chưa có note nào được tạo</p>
+        </div>
+    {% endif %}
+
+    <div x-show="isModalOpen" style="display: none;" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div @click.away="isModalOpen = false" class="bg-white dark:bg-gray-800 p-6 rounded-lg w-96 shadow-xl">
+            <h2 class="text-xl font-bold mb-4">Tạo Note mới</h2>
+            <form method="POST" action="{% url 'dashboard' %}">
+                {% csrf_token %}
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1">Tên notebook</label>
+                    <input type="text" name="name" required class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600">
+                </div>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" @click="isModalOpen = false" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Tạo Note</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
