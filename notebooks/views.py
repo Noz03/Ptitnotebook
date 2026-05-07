@@ -154,8 +154,8 @@ def save_answer_ajax(request, pk):
         return JsonResponse({'error': 'Answer text is required.'}, status=400)
 
     summary = answer_text[:100]
-    SavedAnswer.objects.create(notebook=notebook, summary=summary, full_content=answer_text)
-    return JsonResponse({'status': 'success', 'summary': summary, 'full_content': answer_text})
+    saved_answer = SavedAnswer.objects.create(notebook=notebook, summary=summary, full_content=answer_text)
+    return JsonResponse({'status': 'success', 'id': saved_answer.id, 'summary': summary, 'full_content': answer_text})
 
 @login_required
 def export_saved_answer(request, pk, answer_pk):

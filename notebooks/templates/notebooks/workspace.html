@@ -139,6 +139,34 @@
         const chatHistory = document.getElementById('chat-history');
         const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
 
+        // Function to open modal with saved answer content
+        const openSavedAnswerModal = (title, content) => {
+            const mainDiv = document.querySelector('[x-data*="isSavedModalOpen"]');
+            if (!mainDiv) return;
+            
+            // Try to update via Alpine's internal API
+            if (mainDiv.__x && mainDiv.__x.$data) {
+                // Alpine 3.x way
+                mainDiv.__x.$data.isSavedModalOpen = true;
+                mainDiv.__x.$data.modalTitle = title;
+                mainDiv.__x.$data.modalContent = content;
+            } else if (mainDiv._x_dataStack && mainDiv._x_dataStack[0]) {
+                // Alternative Alpine access method
+                const data = mainDiv._x_dataStack[0];
+                data.isSavedModalOpen = true;
+                data.modalTitle = title;
+                data.modalContent = content;
+            } else {
+                // Fallback: directly update modal DOM elements
+                const modalElement = document.querySelector('[x-show*="isSavedModalOpen"]');
+                const titleElement = modalElement?.querySelector('[x-text*="modalTitle"]');
+                const contentElement = modalElement?.querySelector('[x-text*="modalContent"]');
+                if (titleElement) titleElement.textContent = title;
+                if (contentElement) contentElement.textContent = content;
+                if (modalElement) modalElement.style.display = 'flex';
+            }
+        };
+
         const escapeHtml = (value) => {
             return value
                 .replace(/&/g, '&amp;')
@@ -252,6 +280,54 @@
                         alert(data.error || 'Lỗi khi lưu câu trả lời.');
                         return;
                     }
+
+                    // Dynamically add the new saved answer to the list
+                    const savedAnswersList = document.getElementById('saved-answers-list');
+                    const emptyMessage = savedAnswersList.querySelector('p');
+                    if (emptyMessage) {
+                        emptyMessage.remove();
+                    }
+
+                    const newCard = document.createElement('div');
+                    newCard.className = 'flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-400 cursor-pointer';
+                    newCard.dataset.savedAnswerId = data.id || '';
+                    newCard.dataset.modalTitle = data.summary;
+                    newCard.dataset.modalContent = data.full_content;
+                    
+                    const summary = data.summary || answerText.substring(0, 100);
+                    
+                    newCard.innerHTML = `
+                        <span class="text-sm truncate w-4/5">${escapeHtml(summary)}</span>
+                        <div class="relative">
+                            <button type="button" class="text-gray-400 hover:text-gray-600 px-1 menu-toggle">
+                                ⋮
+                            </button>
+                            <div class="menu-dropdown hidden absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-600 z-10">
+                                <a href="/notebook/${workspacePk}/saved-answer/${data.id || ''}/export/" class="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">Xuất Text</a>
+                                <button type="button" data-action="delete-saved-answer" data-answer-id="${data.id || ''}" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700 border-t border-gray-100 dark:border-gray-700">Xóa</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    const menuToggle = newCard.querySelector('.menu-toggle');
+                    const menuDropdown = newCard.querySelector('.menu-dropdown');
+                    
+                    menuToggle.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        menuDropdown.classList.toggle('hidden');
+                    });
+                    
+                    document.addEventListener('click', () => {
+                        menuDropdown.classList.add('hidden');
+                    });
+                    
+                    newCard.addEventListener('click', (e) => {
+                        if (!e.target.closest('button') && !e.target.closest('a')) {
+                            openSavedAnswerModal(newCard.dataset.modalTitle, newCard.dataset.modalContent);
+                        }
+                    });
+                    
+                    savedAnswersList.insertBefore(newCard, savedAnswersList.firstChild);
                     alert('Câu trả lời đã được lưu thành công.');
                 } catch (err) {
                     console.error(err);
