@@ -567,6 +567,7 @@ Received 2 embeddings
 
 **Giải pháp:** Ứng dụng sẽ tự động dùng fallback splitter. Để cài đặt module thực:
 ```bash
+pip install pymupdf chromadb requests
 pip install langchain-text-splitters
 ```
 
