@@ -84,10 +84,10 @@ Django là framework web Python phổ biến nhất toàn thế giới, đặc b
 PostgreSQL là hệ quản trị cơ sở dữ liệu quan hệ SQL mạnh mẽ, lưu trữ **dữ liệu có cấu trúc**:
 
 - **Người dùng**: ID, username, password hash, email.
-- **Sổ tay (Notebooks)**: ID, người dùng, tên, ngày tạo, ngày truy cập cuối.
-- **Tài liệu (Documents)**: ID, sổ tay, tên file, đường dẫn file, trạng thái `is_selected`.
-- **Lịch sử trò chuyện (ChatHistory)**: ID, sổ tay, câu hỏi, câu trả lời, timestamp.
-- **Câu trả lời đã lưu (SavedAnswer)**: ID, sổ tay, summary, nội dung đầy đủ, timestamp.
+- **Sổ tay (Notebooks)**: ID, user, name, created_at, last_accessed.
+- **Tài liệu (Documents)**: ID, notebook, file_name, file_path, is_selected `is_selected`.
+- **Lịch sử trò chuyện (ChatHistory)**: ID, notebook, question, answer, created_at.
+- **Câu trả lời đã lưu (SavedAnswer)**: ID, notebook, summary, full_content, saved_at.
 
 **Ưu điểm**:
 - Hỗ trợ transactions ACID: Đảm bảo tính nhất quán dữ liệu (e.g., nếu lưu Document thất bại, không tạo chunk trong ChromaDB).
