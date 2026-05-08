@@ -339,7 +339,7 @@ print("Models ready!")
 
 **Thời gian chạy:** ~5-10 phút (tùy vào tốc độ mạng và kích thước model)
 
-### 4.4 Cell 3: Tạo FastAPI Application
+### 4.4 Cell 3 (api.py): Tạo FastAPI Application
 
 Chạy cell Python với `%%writefile api.py`:
 
@@ -434,7 +434,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-### 4.5 Cell 4: Khởi chạy FastAPI với Ngrok
+### 4.5 Cell 4(run_ngrok.py): Khởi chạy FastAPI với Ngrok
 
 Chạy cell Python:
 
