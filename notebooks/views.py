@@ -187,9 +187,15 @@ def chat_ajax(request, pk):
         return JsonResponse({'error': 'Vui lòng chọn ít nhất một tài liệu.'}, status=400)
 
     try:
+        selected_sources = list(selected_docs.values_list('file_name', flat=True))
+
         # Tìm kiếm ngữ cảnh
         vector_db = VectorDBService()
-        search_results = vector_db.search_similar_chunks(question, top_k=3)
+        search_results = vector_db.search_similar_chunks(
+            question,
+            selected_sources=selected_sources,
+            top_k=5
+        )
         
         # Xử lý kết quả trả về từ vector DB
         context_parts = []

@@ -106,14 +106,23 @@ class VectorDBService:
             documents=texts
         )
 
-    def search_similar_chunks(self, question, top_k=3):
+    def search_similar_chunks(self, question, selected_sources=None, top_k=5):
         # Tìm kiếm các đoạn văn bản có độ tương đồng cao nhất với câu hỏi.
         # Nhúng câu hỏi thành vector
         question_embedding = KaggleService.get_embeddings([question])[0]
-        
-        # Truy vấn không gian vector
+
+        where_filter = None
+        if selected_sources:
+            selected_sources = list(selected_sources)
+            if len(selected_sources) == 1:
+                where_filter = {"source": selected_sources[0]}
+            else:
+                where_filter = {"source": {"$in": selected_sources}}
+
+        # Truy vấn không gian vector với bộ lọc metadata source
         results = self.collection.query(
             query_embeddings=[question_embedding],
-            n_results=top_k
+            n_results=top_k,
+            where=where_filter
         )
         return results
