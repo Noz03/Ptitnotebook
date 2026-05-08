@@ -543,7 +543,7 @@ notebooks/                          ← App "notebooks"
 
 ---
 
-## 4. GIẢI PHẪU CHI TIẾT LOGIC CODE (DETAILED CODE ANATOMY)
+## 4. CHI TIẾT CODE (DETAILED CODE ANATOMY)
 
 ### A. TẦNG DỊCH VỤ WEB (notebooks/services.py)
 
@@ -1740,6 +1740,3 @@ PtitNotebook là ứng dụng RAG web hoàn chỉnh, kết hợp:
 Mỗi component được thiết kế với suy nghĩ kỹ lưỡng về performance, security, maintainability—tiêu chí cốt lõi của phần mềm chất lượng dành cho thị trường.
 
 ---
-
-**Duyệt lại: [Tên Giáo Sư/Cố Vấn Luận Văn]**  
-**Ngày phê duyệt: [Ngày nộp luận văn]**
