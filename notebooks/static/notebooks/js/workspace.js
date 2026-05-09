@@ -289,6 +289,35 @@ const initWorkspace = () => {
         }
     });
 
+    // BUG 1 FIX: Event listener để toggle trạng thái is_selected của tài liệu
+    // Khi người dùng thay đổi checkbox, gửi AJAX request để lưu vào database
+    document.querySelectorAll('.doc-checkbox').forEach((checkbox) => {
+        checkbox.addEventListener('change', async (event) => {
+            const docId = event.target.dataset.docId;
+            const toggleEndpoint = `${baseUrl}/document/${docId}/toggle/`;
+            
+            try {
+                const data = await safeFetchJson(toggleEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                // Silent sync - không hiển thị thông báo, chỉ cập nhật trạng thái
+                // Trạng thái is_selected đã được lưu vào database
+                if (data.status === 'success') {
+                    console.log(`Document ${docId} is_selected updated to ${data.is_selected}`);
+                }
+            } catch (error) {
+                console.error(`Lỗi khi cập nhật tài liệu ${docId}:`, error);
+                // Rollback UI nếu có lỗi
+                event.target.checked = !event.target.checked;
+            }
+        });
+    });
+
     document.addEventListener('click', () => {
         closeAllSavedAnswerMenus();
     });

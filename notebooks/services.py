@@ -81,7 +81,9 @@ class VectorDBService:
     # Quản lý và truy vấn cơ sở dữ liệu Vector (ChromaDB).
     def __init__(self):
         # Kết nối tới dịch vụ ChromaDB
-        self.client = chromadb.HttpClient(host='localhost', port=8000)
+        chroma_host = getattr(settings, 'CHROMA_DB_HOST', 'localhost')
+        chroma_port = getattr(settings, 'CHROMA_DB_PORT', 8000)
+        self.client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
         self.collection = self.client.get_or_create_collection(name="ptitnotebook_collection")
 
     def save_chunks_to_db(self, chunks_data):
@@ -113,11 +115,9 @@ class VectorDBService:
 
         where_filter = None
         if selected_sources:
-            selected_sources = list(selected_sources)
-            if len(selected_sources) == 1:
-                where_filter = {"source": selected_sources[0]}
-            else:
-                where_filter = {"source": {"$in": selected_sources}}
+            clean_sources = [str(src) for src in selected_sources if str(src).strip()]
+            if clean_sources:
+                where_filter = {"source": {"$in": clean_sources}}
 
         # Truy vấn không gian vector với bộ lọc metadata source
         results = self.collection.query(

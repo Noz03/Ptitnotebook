@@ -26,12 +26,12 @@
         <div class="flex-1 overflow-y-auto space-y-2">
             {% for doc in documents %}
             <div class="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md">
+                {# BUG 1 FIX: Thêm class doc-checkbox, data-doc-id, và kiểm tra is_selected từ DB #}
                 <input type="checkbox" 
-                       name="selected_docs" 
-                       value="{{ doc.id }}"
+                       class="doc-checkbox w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                       data-doc-id="{{ doc.id }}"
                        {% if doc.is_selected %}checked x-init="checkedCount++"{% endif %}
-                       @change="$event.target.checked ? checkedCount++ : checkedCount--"
-                       class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                       @change="$event.target.checked ? checkedCount++ : checkedCount--">
                 <span class="text-sm truncate" title="{{ doc.file_name }}">{{ doc.file_name }}</span>
             </div>
             {% empty %}

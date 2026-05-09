@@ -68,7 +68,8 @@ def workspace(request, pk):
         doc = Document.objects.create(
             notebook=notebook,
             file_name=uploaded_file.name,
-            file_path=uploaded_file
+            file_path=uploaded_file,
+            is_selected=True
         )
 
         # 2. Tiền xử lý văn bản (Ingestion Pipeline)
@@ -131,19 +132,18 @@ def delete_notebook(request, pk):
 
 @login_required
 @require_POST
-def chat_ajax(request, pk):
+def toggle_document_selection(request, pk, doc_id):
+    # BUG 1 FIX: Xử lý AJAX toggle trạng thái is_selected của tài liệu
+    # Đảm bảo tài liệu thuộc về notebook hiện tại và user hiện tại
     notebook = get_object_or_404(Notebook, pk=pk, user=request.user)
-    question = request.POST.get('question', '').strip()
-    if not question:
-        return JsonResponse({'error': 'Question is required.'}, status=400)
-
-    selected_docs = Document.objects.filter(notebook=notebook, is_selected=True)
-    if not selected_docs.exists():
-        return JsonResponse({'error': 'No selected documents found.'}, status=400)
-
-    answer = 'This is a mock AI response.'
-    ChatHistory.objects.create(notebook=notebook, question=question, answer=answer)
-    return JsonResponse({'question': question, 'answer': answer})
+    document = get_object_or_404(Document, pk=doc_id, notebook=notebook)
+    
+    # Chuyển đổi trạng thái is_selected
+    document.is_selected = not document.is_selected
+    document.save()
+    
+    # Trả về kết quả dưới dạng JSON
+    return JsonResponse({'status': 'success', 'is_selected': document.is_selected})
 
 @login_required
 @require_POST

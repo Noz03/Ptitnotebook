@@ -367,10 +367,11 @@ notebooks/                          ← App "notebooks"
 │    - Document.objects.create(                                       │
 │        notebook=notebook,                                           │
 │        file_name="report.pdf",                                      │
-│        file_path=uploaded_file  ← Django FileField auto saves      │
+│        file_path=uploaded_file,                                     │
+│        is_selected=True  ← Auto-select uploaded document           │
 │      )                                                              │
 │    - File được lưu vào media/documents/report_TIMESTAMP.pdf        │
-│    - Database record tạo với is_selected=False                     │
+│    - Database record tạo với is_selected=True                      │
 └──────────────────────────────────────────────────────────────────────┘
                             ↓
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -405,9 +406,8 @@ notebooks/                          ← App "notebooks"
 └──────────────────────────────────────────────────────────────────────┘
                             ↓
 ┌──────────────────────────────────────────────────────────────────────┐
-│ 6. SET IS_SELECTED                                                   │
-│    - doc.is_selected = True                                         │
-│    - doc.save()                                                     │
+│ 6. DOCUMENT READY FOR USE                                           │
+│    - Document đã được tạo với is_selected=True                     │
 │    - Tài liệu sẵn sàng sử dụng trong chat query                    │
 └──────────────────────────────────────────────────────────────────────┘
                             ↓
@@ -460,13 +460,14 @@ notebooks/                          ← App "notebooks"
 │    - Embed question: KaggleService.get_embeddings([question])     │
 │      → 1x384-dim vector                                            │
 │    - Build where_filter:                                          │
-│      len(selected_sources) == 1 → {"source": "guide.pdf"}        │
-│      (exact match, không $in operator)                            │
+│      clean_sources = [str(src) for src in selected_sources if str(src).strip()] │
+│      if clean_sources: where_filter = {"source": {"$in": clean_sources}} │
+│      (luôn dùng $in operator cho consistency)                      │
 │    - Query ChromaDB:                                              │
 │      collection.query(                                             │
 │        query_embeddings=[question_embedding],                      │
 │        n_results=5,                                                │
-│        where={"source": "guide.pdf"}  ← CRITICAL FILTER           │
+│        where={"source": {"$in": ["guide.pdf"]}}  ← CRITICAL FILTER │
 │      )                                                              │
 │    - Return top 5 chunks từ guide.pdf (nếu notes.pdf, ignore)    │
 └──────────────────────────────────────────────────────────────────────┘
@@ -785,7 +786,38 @@ class KaggleService:
 
 ---
 
-#### A.3. VectorDBService.search_similar_chunks
+#### A.2. VectorDBService.__init__
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+class VectorDBService:
+    # Quản lý và truy vấn cơ sở dữ liệu Vector (ChromaDB).
+    def __init__(self):
+        # Kết nối tới dịch vụ ChromaDB
+        chroma_host = getattr(settings, 'CHROMA_DB_HOST', 'localhost')
+        chroma_port = getattr(settings, 'CHROMA_DB_PORT', 8000)
+        self.client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+        self.collection = self.client.get_or_create_collection(name="ptitnotebook_collection")
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 2**: Comment mô tả lớp.
+
+- **Dòng 4-6**: Configurable ChromaDB connection:
+  - `chroma_host`: Lấy từ Django settings, default 'localhost'.
+  - `chroma_port`: Lấy từ Django settings, default 8000.
+  - **Lý do configurable**: Cho phép deploy ChromaDB trên server riêng, hoặc dùng Docker với different ports.
+
+- **Dòng 7**: `chromadb.HttpClient(host=chroma_host, port=chroma_port)`:
+  - Khởi tạo HTTP client để kết nối ChromaDB server.
+  - ChromaDB chạy như HTTP server (default port 8000).
+
+- **Dòng 8**: `get_or_create_collection(name="ptitnotebook_collection")`:
+  - Tạo collection nếu chưa tồn tại, hoặc lấy existing collection.
+  - Collection lưu tất cả embeddings và metadata cho toàn bộ ứng dụng.
+  - **Tại sao 1 collection**: Đơn giản hóa, dễ manage. Metadata filtering handle multi-user isolation.
 
 **MÃ NGUỒN ĐẦY ĐỦ:**
 
@@ -797,11 +829,9 @@ def search_similar_chunks(self, question, selected_sources=None, top_k=5):
 
     where_filter = None
     if selected_sources:
-        selected_sources = list(selected_sources)
-        if len(selected_sources) == 1:
-            where_filter = {"source": selected_sources[0]}
-        else:
-            where_filter = {"source": {"$in": selected_sources}}
+        clean_sources = [str(src) for src in selected_sources if str(src).strip()]
+        if clean_sources:
+            where_filter = {"source": {"$in": clean_sources}}
 
     # Truy vấn không gian vector với bộ lọc metadata source
     results = self.collection.query(
@@ -829,33 +859,34 @@ def search_similar_chunks(self, question, selected_sources=None, top_k=5):
 
 - **Dòng 6**: Khởi tạo `where_filter = None`. Nếu không filter, truy vấn toàn ChromaDB.
 
-- **Dòng 7-12**: **LOGIC SIÊU QUAN TRỌNG - METADATA FILTERING**:
+- **Dòng 7-10**: **LOGIC SIÊU QUAN TRỌNG - METADATA FILTERING**:
 
   ```python
   if selected_sources:
-      selected_sources = list(selected_sources)  # Convert QuerySet to list
-      if len(selected_sources) == 1:
-          where_filter = {"source": selected_sources[0]}
-      else:
-          where_filter = {"source": {"$in": selected_sources}}
+      clean_sources = [str(src) for src in selected_sources if str(src).strip()]
+      if clean_sources:
+          where_filter = {"source": {"$in": clean_sources}}
   ```
 
+  **Luôn sử dụng $in operator** (đã fix bug):
+  - `clean_sources`: Convert sang string, filter empty strings.
+  - `where_filter = {"source": {"$in": clean_sources}}`: ChromaDB filter với IN operator.
+  - **Tại sao luôn $in**: Đảm bảo consistency, tránh bug với single file. ChromaDB handle single-element $in tốt.
+
   **Scenario 1 - Single File** (user chỉ chọn "guide.pdf"):
-  - `selected_sources = ["guide.pdf"]`
-  - `len(selected_sources) == 1` → True
-  - `where_filter = {"source": "guide.pdf"}` (exact match)
+  - `clean_sources = ["guide.pdf"]`
+  - `where_filter = {"source": {"$in": ["guide.pdf"]}}` (IN với 1 element)
   - ChromaDB chỉ trả chunks với `metadata["source"] == "guide.pdf"`.
 
   **Scenario 2 - Multiple Files** (user chọn "guide.pdf" + "notes.pdf"):
-  - `selected_sources = ["guide.pdf", "notes.pdf"]`
-  - `len(selected_sources) == 2` → False
-  - `where_filter = {"source": {"$in": ["guide.pdf", "notes.pdf"]}}` (SQL IN operator)
+  - `clean_sources = ["guide.pdf", "notes.pdf"]`
+  - `where_filter = {"source": {"$in": ["guide.pdf", "notes.pdf"]}}`
   - ChromaDB trả chunks với `metadata["source"]` ∈ `["guide.pdf", "notes.pdf"]`.
 
-  **Tại sao hai cách khác nhau**?
-  - Performance: Single file `{"source": "X"}` là indexed lookup, nhanh hơn.
-  - Correctness: Cả hai cách đều đúng, nhưng single-file là optimization.
-  - **ChromaDB document**: `{"key": value}` for exact match, `{"key": {"$in": [values]}}` for IN.
+  **Tại sao sửa đổi này**?
+  - **Bug fix**: Logic cũ có thể gây inconsistent filtering.
+  - **Performance**: ChromaDB optimize $in queries.
+  - **Correctness**: Đảm bảo tất cả selected sources được filter đúng.
 
   **Scenario 3 - No Selected Sources** (nếu selected_sources = [] hoặc None):
   - `if selected_sources` → False
@@ -1107,6 +1138,497 @@ TRẢ LỜI:"""
   - Etc.
 - Return `{'error': str(e)}` status 500.
 - Frontend catch 500 → show alert with error message.
+
+---
+
+#### B.2. login_view
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+def login_view(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+    if request.method == 'POST':
+        u = request.POST.get('username')
+        p = request.POST.get('password')
+        user = authenticate(request, username=u, password=p)
+        if user:
+            login(request, user)
+            return redirect('dashboard')
+        messages.error(request, 'Sai tên đăng nhập hoặc mật khẩu!')
+    return render(request, 'notebooks/login.html')
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 1**: Hàm view không cần `@login_required` vì login page công khai.
+
+- **Dòng 2-3**: Nếu user đã authenticated, redirect sang dashboard (tránh access login page khi đã login).
+
+- **Dòng 4**: Check HTTP method = POST (form submission).
+
+- **Dòng 5-6**: Trích username và password từ `request.POST` dict.
+
+- **Dòng 7**: `authenticate(request, username=u, password=p)`:
+  - Django's built-in authentication function.
+  - Check credentials against database.
+  - Return User object nếu thành công, None nếu thất bại.
+
+- **Dòng 8-10**: Nếu authenticate thành công:
+  - `login(request, user)`: Set session, mark user as logged in.
+  - Redirect sang dashboard.
+
+- **Dòng 11**: Nếu thất bại, add error message vào messages framework.
+
+- **Dòng 12**: Render login template với context (bao gồm messages).
+
+**Security Notes**:
+- Không có brute force protection (có thể add rate limiting).
+- Password hashing tự động bởi Django's User model.
+
+---
+
+#### B.3. signup_view
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+def signup_view(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+    if request.method == 'POST':
+        u = request.POST.get('username')
+        p = request.POST.get('password')
+        cp = request.POST.get('confirm_password')
+        if p != cp:
+            messages.error(request, 'Mật khẩu không khớp!')
+        elif User.objects.filter(username=u).exists():
+            messages.error(request, 'Tên đăng nhập đã tồn tại!')
+        else:
+            User.objects.create_user(username=u, password=p)
+            messages.success(request, 'Đăng ký thành công!')
+            return redirect('login')
+    return render(request, 'notebooks/signup.html')
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 1**: Tương tự login_view, không cần login_required.
+
+- **Dòng 2-3**: Redirect nếu đã login.
+
+- **Dòng 4**: Check POST request.
+
+- **Dòng 5-7**: Lấy form data: username, password, confirm_password.
+
+- **Dòng 8-9**: Validate password match:
+  - Nếu không match, error message.
+
+- **Dòng 10-11**: Check username uniqueness:
+  - Query database xem username đã tồn tại.
+  - Nếu có, error message.
+
+- **Dòng 12-14**: Nếu validation pass:
+  - `User.objects.create_user(username=u, password=p)`: Tạo user với password hashed.
+  - Add success message.
+  - Redirect sang login page.
+
+- **Dòng 15**: Render signup template.
+
+**Security Notes**:
+- Password confirmation prevent typos.
+- Username uniqueness prevent conflicts.
+- Password auto-hashed by Django.
+
+---
+
+#### B.4. logout_view
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 1**: `@login_required` decorator (implicit từ context).
+
+- **Dòng 2**: `logout(request)`: Django's built-in logout function.
+  - Clear session, mark user as anonymous.
+
+- **Dòng 3**: Redirect sang login page.
+
+**Security Notes**:
+- Logout clear tất cả session data.
+- Redirect prevent access logout URL sau logout.
+
+---
+
+#### B.5. dashboard
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+@login_required
+def dashboard(request):
+    user = request.user 
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        if name:
+            new_note = Notebook.objects.create(user=user, name=name)
+            return redirect('workspace', pk=new_note.id)
+    notebooks = Notebook.objects.filter(user=user).order_by('-last_accessed')
+    return render(request, 'notebooks/dashboard.html', {'notebooks': notebooks})
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 1**: `@login_required`: Chỉ authenticated user access.
+
+- **Dòng 2**: `user = request.user`: Lấy current user object.
+
+- **Dòng 3**: Check POST request (create new notebook).
+
+- **Dòng 4**: Lấy name từ form.
+
+- **Dòng 5-7**: Nếu name valid:
+  - Create Notebook với user=current user.
+  - Redirect sang workspace của notebook mới.
+
+- **Dòng 8**: Query notebooks của user, order by last_accessed descending.
+
+- **Dòng 9**: Render dashboard template với notebooks list.
+
+**Business Logic**:
+- Dashboard show list notebooks của user.
+- Allow create new notebook directly từ dashboard.
+
+---
+
+#### B.6. workspace
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+@login_required
+def workspace(request, pk):
+    notebook = get_object_or_404(Notebook, pk=pk, user=request.user)
+    notebook.save()  # Update last_accessed
+
+    # UPLOAD TÀI LIỆU 
+    if request.method == 'POST' and request.FILES.get('document'):
+        uploaded_file = request.FILES['document']
+        
+        # 1. Lưu bản ghi vào PostgreSQL
+        doc = Document.objects.create(
+            notebook=notebook,
+            file_name=uploaded_file.name,
+            file_path=uploaded_file,
+            is_selected=True
+        )
+
+        # 2. Tiền xử lý văn bản (Ingestion Pipeline)
+        try:
+            # Lấy đường dẫn vật lý của file vừa lưu
+            file_full_path = doc.file_path.path
+            
+            # Gọi DocumentService để băm nhỏ file
+            chunks = DocumentService.process_and_chunk_pdf(file_full_path, doc.file_name)
+            
+            # Gọi VectorDBService để gửi lên Kaggle và lưu vào ChromaDB
+            vector_service = VectorDBService()
+            vector_service.save_chunks_to_db(chunks)
+            
+            # Mặc định chọn tài liệu này làm nguồn sau khi upload thành công
+            doc.is_selected = True
+            doc.save()
+            
+        except Exception as e:
+            # Nếu có lỗi, xóa bản ghi để đảm bảo sạch dữ liệu
+            doc.delete()
+            from django.contrib import messages
+            messages.error(request, f"Lỗi xử lý AI: {str(e)}")
+
+        return redirect('workspace', pk=notebook.id)
+
+    # LẤY DỮ LIỆU
+    documents = Document.objects.filter(notebook=notebook)
+    chat_history = ChatHistory.objects.filter(notebook=notebook).order_by('created_at')
+    saved_answers = SavedAnswer.objects.filter(notebook=notebook).order_by('-saved_at')
+
+    context = {
+        'notebook': notebook,
+        'documents': documents,
+        'chat_history': chat_history,
+        'saved_answers': saved_answers,
+    }
+    return render(request, 'notebooks/workspace.html', context)
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+**Decorators & Security (Dòng 1-2)**:
+
+- `@login_required`: Chỉ authenticated user.
+- `get_object_or_404(Notebook, pk=pk, user=request.user)`: Lấy notebook với security check.
+  - `pk=pk`: Match URL parameter.
+  - `user=request.user`: Chỉ notebook của current user.
+  - Nếu không tìm thấy, return 404 (không leak existence).
+
+- `notebook.save()`: Update `last_accessed` timestamp.
+
+**Document Upload Logic (Dòng 4-37)**:
+
+- **Dòng 4**: Check POST request với file upload.
+
+- **Dòng 5**: Lấy uploaded file từ `request.FILES`.
+
+- **Dòng 7-11**: Create Document record:
+  - `file_path=uploaded_file`: Django FileField auto-save file vào media/documents/.
+  - `is_selected=True`: Auto-select uploaded document.
+
+- **Dòng 13-14**: Get physical file path.
+
+- **Dòng 16**: Call DocumentService để process PDF → chunks.
+
+- **Dòng 19-20**: Call VectorDBService để embed và save chunks.
+
+- **Dòng 23-24**: Set is_selected=True (redundant nhưng explicit).
+
+- **Dòng 26-29**: Error handling:
+  - Delete document record nếu processing fail.
+  - Show error message.
+
+- **Dòng 31**: Redirect back to workspace.
+
+**Data Retrieval (Dòng 34-44)**:
+
+- Query documents, chat history, saved answers của notebook.
+
+- Build context dict.
+
+- Render workspace template.
+
+**Business Logic**:
+- Workspace là main interface: upload documents, chat, manage saved answers.
+- Auto-select uploaded documents for immediate use.
+
+---
+
+#### B.7. rename_notebook
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+@login_required
+@require_POST
+def rename_notebook(request, pk):
+    notebook = get_object_or_404(Notebook, pk=pk, user=request.user)
+    new_name = request.POST.get('new_name', '').strip()
+    if new_name:
+        notebook.name = new_name
+        notebook.save()
+        messages.success(request, 'Notebook đã được đổi tên thành công.')
+    else:
+        messages.error(request, 'Tên notebook không được để trống.')
+    return redirect('workspace', pk=notebook.id)
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 1-2**: Security decorators.
+
+- **Dòng 3**: Get notebook with ownership check.
+
+- **Dòng 4**: Get và validate new_name.
+
+- **Dòng 5-8**: Nếu valid:
+  - Update name.
+  - Save to database.
+  - Show success message.
+
+- **Dòng 9-10**: Nếu invalid, error message.
+
+- **Dòng 11**: Redirect back to workspace.
+
+---
+
+#### B.8. delete_notebook
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+@login_required
+@require_POST
+def delete_notebook(request, pk):
+    notebook = get_object_or_404(Notebook, pk=pk, user=request.user)
+    notebook.delete()
+    messages.success(request, 'Notebook đã được xóa.')
+    return redirect('dashboard')
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 1-2**: Security decorators.
+
+- **Dòng 3**: Get notebook with ownership check.
+
+- **Dòng 4**: Delete notebook (cascade delete related objects).
+
+- **Dòng 5**: Success message.
+
+- **Dòng 6**: Redirect to dashboard.
+
+**Cascade Effects**:
+- Delete notebook → auto-delete related Documents, ChatHistory, SavedAnswer.
+- ChromaDB chunks không auto-delete (có thể implement cleanup nếu cần).
+
+---
+
+#### B.9. toggle_document_selection
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+@login_required
+@require_POST
+def toggle_document_selection(request, pk, doc_id):
+    # BUG 1 FIX: Xử lý AJAX toggle trạng thái is_selected của tài liệu
+    # Đảm bảo tài liệu thuộc về notebook hiện tại và user hiện tại
+    notebook = get_object_or_404(Notebook, pk=pk, user=request.user)
+    document = get_object_or_404(Document, pk=doc_id, notebook=notebook)
+    
+    # Chuyển đổi trạng thái is_selected
+    document.is_selected = not document.is_selected
+    document.save()
+    
+    # Trả về kết quả dưới dạng JSON
+    return JsonResponse({'status': 'success', 'is_selected': document.is_selected})
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 1-2**: Security decorators.
+
+- **Dòng 4-5**: Double ownership check:
+  - Notebook belongs to user.
+  - Document belongs to notebook.
+
+- **Dòng 8**: Toggle boolean: True → False, False → True.
+
+- **Dòng 9**: Save to database.
+
+- **Dòng 11**: Return JSON response cho AJAX.
+
+**Business Logic**:
+- Allow user select/deselect documents for RAG queries.
+- AJAX update without page reload.
+
+---
+
+#### B.10. save_answer_ajax
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+@login_required
+@require_POST
+def save_answer_ajax(request, pk):
+    notebook = get_object_or_404(Notebook, pk=pk, user=request.user)
+    answer_text = request.POST.get('answer_text', '').strip()
+    if not answer_text:
+        return JsonResponse({'error': 'Answer text is required.'}, status=400)
+
+    summary = answer_text[:100]
+    saved_answer = SavedAnswer.objects.create(notebook=notebook, summary=summary, full_content=answer_text)
+    return JsonResponse({'status': 'success', 'id': saved_answer.id, 'summary': summary, 'full_content': answer_text})
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 1-2**: Security decorators.
+
+- **Dòng 3**: Get notebook with ownership check.
+
+- **Dòng 4**: Get và validate answer_text.
+
+- **Dòng 5-6**: Nếu empty, return 400 error.
+
+- **Dòng 8**: Create summary (first 100 chars).
+
+- **Dòng 9**: Create SavedAnswer record.
+
+- **Dòng 10**: Return JSON với saved data.
+
+**Business Logic**:
+- Allow user save important AI answers for later reference.
+- Summary for quick browsing.
+
+---
+
+#### B.11. export_saved_answer
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+@login_required
+def export_saved_answer(request, pk, answer_pk):
+    notebook = get_object_or_404(Notebook, pk=pk, user=request.user)
+    saved_answer = get_object_or_404(SavedAnswer, pk=answer_pk, notebook=notebook)
+    response = HttpResponse(saved_answer.full_content, content_type='text/plain; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="saved_answer_{saved_answer.id}.txt"'
+    return response
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 1**: `@login_required` (GET request).
+
+- **Dòng 2-3**: Double ownership check.
+
+- **Dòng 4**: Create HTTP response với content.
+
+- **Dòng 5**: Set Content-Disposition header → browser download file.
+
+- **Dòng 6**: Return response.
+
+**Business Logic**:
+- Allow export saved answers as text files.
+- Filename include ID for uniqueness.
+
+---
+
+#### B.12. delete_saved_answer
+
+**MÃ NGUỒN ĐẦY ĐỦ:**
+
+```python
+@login_required
+@require_POST
+def delete_saved_answer(request, pk, answer_pk):
+    notebook = get_object_or_404(Notebook, pk=pk, user=request.user)
+    saved_answer = get_object_or_404(SavedAnswer, pk=answer_pk, notebook=notebook)
+    saved_answer.delete()
+    return JsonResponse({'status': 'success'})
+```
+
+**GIẢI THÍCH CHI TIẾT:**
+
+- **Dòng 1-2**: Security decorators.
+
+- **Dòng 3-4**: Double ownership check.
+
+- **Dòng 5**: Delete saved answer.
+
+- **Dòng 6**: Return success JSON.
+
+**Business Logic**:
+- Allow cleanup of saved answers.
+- AJAX delete without page reload.
 
 ---
 
@@ -1650,6 +2172,8 @@ PtitNotebook project bao gồm các tầng:
      - `TEMPLATES = [{'BACKEND': 'django.template.backends.django.DjangoTemplates', ...}]`.
      - `STATIC_URL = '/static/'`, `STATICFILES_DIRS`, `STATIC_ROOT` (app encapsulation).
      - `KAGGLE_API_URL = "https://...ngrok..."` (remote AI server).
+     - `CHROMA_DB_HOST = "localhost"` (ChromaDB host, optional).
+     - `CHROMA_DB_PORT = 8000` (ChromaDB port, optional).
 
 5. **Static Files** (CSS, JS):
    - `notebooks/static/notebooks/js/workspace.js`: Chat logic (CSRF, AJAX, DOM).

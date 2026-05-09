@@ -13,4 +13,6 @@ urlpatterns = [
     path('notebook/<int:pk>/save-answer/', views.save_answer_ajax, name='save_answer_ajax'),
     path('notebook/<int:pk>/saved-answer/<int:answer_pk>/export/', views.export_saved_answer, name='export_saved_answer'),
     path('notebook/<int:pk>/saved-answer/<int:answer_pk>/delete/', views.delete_saved_answer, name='delete_saved_answer'),
+    # BUG 1 FIX: Endpoint để toggle trạng thái is_selected của tài liệu
+    path('notebook/<int:pk>/document/<int:doc_id>/toggle/', views.toggle_document_selection, name='toggle_document_selection'),
 ]
